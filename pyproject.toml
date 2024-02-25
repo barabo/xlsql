@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xlsql"
-version = "0.2.3"
+version = "0.2.4"
 description = "Convert a spreadsheet into a sqlite3 database."
 authors = ["Carl Anderson <carl.anderson@gmail.com>"]
 readme = "README.md"
@@ -9,6 +9,9 @@ readme = "README.md"
 click = "^8.1.0"
 openpyxl = "^3.0.0"
 python = "^3.11"
+
+[tool.poetry.dev-dependencies]
+pre-commit = "^2.13.0"
 
 [tool.poetry.scripts]
 xlsql = "xlsql.cli:main"
