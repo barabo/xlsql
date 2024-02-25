@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xlsql"
-version = "0.2.1"
+version = "0.2.3"
 description = "Convert a spreadsheet into a sqlite3 database."
 authors = ["Carl Anderson <carl.anderson@gmail.com>"]
 readme = "README.md"

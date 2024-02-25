@@ -46,6 +46,12 @@ def normalize(name: str) -> str:
     "spreadsheet", type=click.Path(exists=True, readable=True, dir_okay=False)
 )
 @click.option(
+    "--column",
+    "-c",
+    multiple=True,
+    help="A column (or columns) to extract.  Can be specified multiple times.",
+)
+@click.option(
     "--database",
     type=click.Path(exists=False),
     default="database.db",
@@ -60,8 +66,9 @@ def normalize(name: str) -> str:
 )
 @click.option(
     "--sheet",
+    "-s",
     multiple=True,
-    help="A sheet to extract.",
+    help="A sheet (or sheets) to extract.  Can be specified multiple times.",
 )
 @click.option(
     "--verbose",
@@ -71,19 +78,23 @@ def normalize(name: str) -> str:
     default=False,
     help="Show verbose output.",
 )
-def main(spreadsheet, database, force, sheet, verbose) -> None:
+def main(spreadsheet, column, database, force, sheet, verbose) -> None:
     """
     Convert an Excel spreadsheet into a SQLite database.
 
     Args:
         spreadsheet (str): The path to the Excel spreadsheet.
+        column (list[str]): The name of a column or columns to extract.
         database (str): The name of the database to create.
         force (bool): Flag to overwrite an existing database.
-        sheet (list[str]): The name of the sheets to extract.
+        sheet (list[str]): The name of the sheet or sheets to extract.
         verbose (bool): Flag to show verbose output.
 
     Returns:
         None
+
+    Raises:
+        click.ClickException: If the destination database already exists and the force flag is not set.
     """
 
     def log(message: str) -> None:
@@ -131,14 +142,26 @@ def main(spreadsheet, database, force, sheet, verbose) -> None:
                 log(
                     f"Mapping contents of sheet '{sheet_name}' to table '{table_name}':"
                 )
-                for heading, column in zip(headings, columns):
-                    log(f"  {heading} -> {column}")
-                create_table_sql = f"CREATE TABLE {table_name} ({', '.join(columns)})"
-                log(f"DB executing SQL: {create_table_sql}")
-                db.execute(create_table_sql)
+
+                # Determine whether any columns in this sheet were selected.
+                selected = []
+                index = 0
+                for heading, column_name in zip(headings, columns):
+                    if not column or heading in column or column_name in column:
+                        selected.append(index)
+                        log(f"  {heading} -> {column_name}")
+                    index += 1
+
+                # Only create the table if columns were selected.
+                if selected:
+                    create_table_sql = (
+                        f"CREATE TABLE {table_name} ({', '.join(columns)})"
+                    )
+                    log(f"DB executing SQL: {create_table_sql}")
+                    db.execute(create_table_sql)
 
                 # Insert the rows in batches.
-                insert_rows = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(['?'] * len(columns))})"
+                insert_rows = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(['?'] * len(selected))})"
                 cursor = db.cursor()
                 batch: list[tuple[str]] = []
                 total = [0]
@@ -172,14 +195,13 @@ def main(spreadsheet, database, force, sheet, verbose) -> None:
                 # Insert rows in batches, flushing the final rows.
                 for row in rows:
                     if row:
-                        insert(row)
+                        if column and selected:
+                            insert([row[i] for i in selected])
+                        else:
+                            insert(row)
                 else:
-                    insert(None)
+                    insert(None)  # Flush a partial batch.
 
     finally:
         # Clean up.
         workbook.close()
-
-
-if __name__ == "__main__":
-    main()
