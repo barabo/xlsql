@@ -16,11 +16,12 @@ Args:
     spreadsheet (str): The path to the Excel spreadsheet.
 
 Options:
-    --column, -c: A column (or columns) to extract. Can be specified multiple times.
-    --database: The name of the database to create. (default: database.db)
-    --force: Overwrite an existing database.
-    --sheet, -s: A sheet (or sheets) to extract. Can be specified multiple times.
+    --column, -c:  A column (or columns) to extract. Can be specified multiple times.
+    --database:    The name of the database to create. (default: database.db)
+    --force:       Overwrite an existing database.
+    --sheet, -s:   A sheet (or sheets) to extract. Can be specified multiple times.
     --verbose, -v: Show verbose output.
+    --version, -V: Show the xlsql version number.
 
 Examples:
     xlsql ~/Documents/Example.xlsx
@@ -41,3 +42,5 @@ Examples:
 
 # Contributing
 To contribute to this project, please fork the repo and make your changes there.  Submit a PR back to this repo for review.
+
+Be sure to install the dev dependencies, such as `pre-commit` and `black`.
