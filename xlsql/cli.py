@@ -58,7 +58,14 @@ def normalize(name: str) -> str:
     default=False,
     help="Overwrite an existing database.",
 )
-def main(spreadsheet, database, force) -> None:
+@click.option(
+    "--verbose", "-v",
+    is_flag=True,
+    type=bool,
+    default=False,
+    help="Show verbose output.",
+)
+def main(spreadsheet, database, force, verbose) -> None:
     """
     Convert an Excel spreadsheet into a SQLite database.
 
@@ -66,17 +73,23 @@ def main(spreadsheet, database, force) -> None:
         spreadsheet (str): The path to the Excel spreadsheet.
         database (str): The name of the database to create.
         force (bool): Flag to overwrite an existing database.
+        verbose (bool): Flag to show verbose output.
 
     Returns:
         None
     """
+
+    def log(message: str) -> None:
+        if verbose:
+            print(message)
+
     # Ensure that the target database won't be overwritten, or that it's OK to
     # overwrite it.
     existing = Path(database)
     if database and existing.exists() and existing.stat().st_size:
-        print(f"{database} exists!")
+        log(f"Destination database already exists: {database}")
         if force:
-            print("Overwriting", database)
+            log("Overwriting due to --force flag.")
             existing.unlink()
         else:
             raise click.ClickException(
@@ -85,25 +98,34 @@ def main(spreadsheet, database, force) -> None:
 
     try:
         # Load the spreadsheet.
+        log(f"Reading contents of speadsheet file: {spreadsheet}")
         workbook = openpyxl.load_workbook(spreadsheet)
 
         # Create a new SQLite database and connect to it.
         with sqlite3.connect(database) as db:
+            log(f"Populating {database} using the contents of {len(workbook.sheetnames)} sheets found in {spreadsheet}.")
+
             # Iterate over the sheets in the workbook.
             for sheet_name in workbook.sheetnames:
                 sheet = workbook[sheet_name]
                 rows = sheet.iter_rows(values_only=True)
 
-                # Create the table.
-                headings = [normalize(heading) for heading in next(rows)]
+                # Create a table for each sheet.
+                headings = list(next(rows))
+                columns = [normalize(heading) for heading in headings]
                 table_name = normalize(sheet_name)
-                print(table_name, headings)
-                db.execute(f"CREATE TABLE {table_name} ({', '.join(headings)})")
+                log(f"Mapping contents of sheet '{sheet_name}' to table '{table_name}':")
+                for heading, column in zip(headings, columns):
+                    log(f"  {heading} -> {column}")
+                create_table_sql = f"CREATE TABLE {table_name} ({', '.join(columns)})"
+                log(f"DB executing SQL: {create_table_sql}")
+                db.execute(create_table_sql)
 
                 # Insert the rows in batches.
-                insert_rows = f"INSERT INTO {table_name} ({', '.join(headings)}) VALUES ({', '.join(['?'] * len(headings))})"
+                insert_rows = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(['?'] * len(columns))})"
                 cursor = db.cursor()
                 batch: list[tuple[str]] = []
+                total = [0]
 
                 def insert(row: tuple[str], batch_size: int = 1000) -> None:
                     """
@@ -116,17 +138,20 @@ def main(spreadsheet, database, force) -> None:
                     Returns:
                         None
                     """
-                    print(row)
                     flush = False if row else True
 
                     if row:
                         batch.append(row)
 
                     if flush or batch and len(batch) >= batch_size:
+                        log(f"  ... inserting {len(batch)} rows")
                         cursor.executemany(insert_rows, batch)
+                        total[0] += len(batch)
                         batch.clear()
                         if flush:
+                            log(f"Writing {total[0]} rows...")
                             db.commit()
+                            log("DONE!")
 
                 # Insert rows in batches, flushing the final rows.
                 for row in rows:
