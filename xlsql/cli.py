@@ -1,22 +1,26 @@
 """xlsql converts an Excel .xlsx spreadsheet into a sqlite3 database.
 
+xlsql converts an Excel .xlsx spreadsheet into a sqlite3 database.
+
 Usage: xlsql [OPTIONS] SPREADSHEET
 
-  Convert an Excel spreadsheet into a SQLite database.
+Convert an Excel spreadsheet into a SQLite database.
 
-  Args:     spreadsheet (str): The path to the Excel spreadsheet.     database
-  (str): The name of the database to create.     force (bool): Flag to
-  overwrite an existing database.
+Args:
+    spreadsheet (str): The path to the Excel spreadsheet.
 
 Options:
-  --database PATH  The name of the database to create.
-  --force          Overwrite an existing database.
-  --help           Show this message and exit.
+    --column, -c: A column (or columns) to extract. Can be specified multiple times.
+    --database: The name of the database to create. (default: database.db)
+    --force: Overwrite an existing database.
+    --sheet, -s: A sheet (or sheets) to extract. Can be specified multiple times.
+    --verbose, -v: Show verbose output.
 
 Examples:
     xlsql ~/Documents/Example.xlsx  # Creates: ~/Documents/example.db
     xlsql ~/Documents/Example.xlsx --database /tmp/example.db
     xlsql ~/Documents/Example.xlsx --database /tmp/example.db --force  # Overwrites existing db!
+
 """
 import click
 import openpyxl
@@ -41,6 +45,36 @@ def normalize(name: str) -> str:
     return name.replace("-", "_").replace(" ", "_")
 
 
+def get_column_names(sheet_name: str, headings: list[str], log: any) -> list[str]:
+    """
+    Get unique column names for a given sheet.
+
+    Args:
+        sheet_name (str): The name of the sheet.
+        headings (list[str]): The list of headings.
+        log (any): The logging function.
+
+    Returns:
+        list[str]: The list of distinct, normalized column names.
+    """
+    seen = {}
+    column_names = []
+    for heading in headings:
+        normalized = normalize(heading)
+        while normalized in seen:
+            suffix = seen[normalized]
+            seen[normalized] += 1
+            normalized = f"{normalized}_{suffix}"
+            log(
+                f"WARN: duplicate heading in {sheet_name}[{heading}]: renaming to: {normalized}"
+            )
+        else:
+            seen[normalized] = 2
+        column_names.append(normalized)
+    assert len(column_names) == len(set(column_names))
+    return column_names
+
+
 @click.command()
 @click.argument(
     "spreadsheet", type=click.Path(exists=True, readable=True, dir_okay=False)
@@ -49,7 +83,7 @@ def normalize(name: str) -> str:
     "--column",
     "-c",
     multiple=True,
-    help="A column (or columns) to extract.  Can be specified multiple times.",
+    help="A column (or columns) to extract. Can be specified multiple times.",
 )
 @click.option(
     "--database",
@@ -68,7 +102,7 @@ def normalize(name: str) -> str:
     "--sheet",
     "-s",
     multiple=True,
-    help="A sheet (or sheets) to extract.  Can be specified multiple times.",
+    help="A sheet (or sheets) to extract. Can be specified multiple times.",
 )
 @click.option(
     "--verbose",
@@ -137,7 +171,7 @@ def main(spreadsheet, column, database, force, sheet, verbose) -> None:
 
                 # Create a table for each sheet.
                 headings = list(next(rows))
-                columns = [normalize(heading) for heading in headings]
+                columns = get_column_names(sheet_name, headings, log)
                 table_name = normalize(sheet_name)
                 log(
                     f"Mapping contents of sheet '{sheet_name}' to table '{table_name}':"
@@ -154,11 +188,17 @@ def main(spreadsheet, column, database, force, sheet, verbose) -> None:
 
                 # Only create the table if columns were selected.
                 if selected:
+                    columns = [columns[i] for i in selected]
                     create_table_sql = (
                         f"CREATE TABLE {table_name} ({', '.join(columns)})"
                     )
                     log(f"DB executing SQL: {create_table_sql}")
                     db.execute(create_table_sql)
+                else:
+                    log(
+                        f"Skipping table {table_name} because no columns were selected."
+                    )
+                    continue
 
                 # Insert the rows in batches.
                 insert_rows = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(['?'] * len(selected))})"
