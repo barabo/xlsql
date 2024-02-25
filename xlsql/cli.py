@@ -17,15 +17,26 @@ Options:
     --verbose, -v: Show verbose output.
 
 Examples:
-    xlsql ~/Documents/Example.xlsx  # Creates: ~/Documents/example.db
-    xlsql ~/Documents/Example.xlsx --database /tmp/example.db
-    xlsql ~/Documents/Example.xlsx --database /tmp/example.db --force  # Overwrites existing db!
+    xlsql ~/Documents/Example.xlsx
+    # Creates: ~/Documents/example.db with all data included in the database.
 
+    xlsql ~/Documents/Example.xlsx --verbose
+    # Creates: ~/Documents/example.db, displaying verbose output while running.
+
+    xlsql ~/Documents/Example.xlsx --database /tmp/example.db
+    # Creates /tmp/example.db with all data included from the Excel sheet.
+
+    xlsql ~/Documents/Example.xlsx --database /tmp/example.db --force
+    # Overwrites the existing db with fresh content from the sheet!
+
+    xlsql example.xlsx -c name -c id -c address -s people
+    # Only select the name, id, and address columns from the people sheet.
 """
 import click
 import openpyxl
 import sqlite3
 from pathlib import Path
+from .version import VERSION
 
 
 def normalize(name: str) -> str:
@@ -77,7 +88,9 @@ def get_column_names(sheet_name: str, headings: list[str], log: any) -> list[str
 
 @click.command()
 @click.argument(
-    "spreadsheet", type=click.Path(exists=True, readable=True, dir_okay=False)
+    "spreadsheet",
+    type=click.Path(exists=True, readable=True),
+    default=".",
 )
 @click.option(
     "--column",
@@ -112,24 +125,32 @@ def get_column_names(sheet_name: str, headings: list[str], log: any) -> list[str
     default=False,
     help="Show verbose output.",
 )
-def main(spreadsheet, column, database, force, sheet, verbose) -> None:
+@click.option(
+    "--version",
+    "-V",
+    is_flag=True,
+    type=bool,
+    default=False,
+    help="Display the version number.",
+)
+@click.pass_context
+def main(ctx, spreadsheet, column, database, force, sheet, verbose, version) -> None:
     """
     Convert an Excel spreadsheet into a SQLite database.
 
-    Args:
-        spreadsheet (str): The path to the Excel spreadsheet.
-        column (list[str]): The name of a column or columns to extract.
-        database (str): The name of the database to create.
-        force (bool): Flag to overwrite an existing database.
-        sheet (list[str]): The name of the sheet or sheets to extract.
-        verbose (bool): Flag to show verbose output.
-
-    Returns:
-        None
-
-    Raises:
-        click.ClickException: If the destination database already exists and the force flag is not set.
+    SPREADSHEET: A spreadsheet to extract data from.
     """
+
+    # Do nothing if only the version info was requested.
+    if version:
+        print(VERSION)
+        return
+
+    # Display --help output if xlsql was invoked with no arguments, or if a
+    # directory was provided instead of a sheet.
+    if spreadsheet == "." or Path(spreadsheet).is_dir():
+        click.echo(ctx.get_help())
+        return
 
     def log(message: str) -> None:
         if verbose:
@@ -145,7 +166,7 @@ def main(spreadsheet, column, database, force, sheet, verbose) -> None:
             existing.unlink()
         else:
             raise click.ClickException(
-                f"Cowardly refusing to overwrite existing db: {database}"
+                f"Cowardly refusing to overwrite existing db: {database} without --force flag"
             )
 
     try:

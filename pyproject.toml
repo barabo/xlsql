@@ -12,6 +12,7 @@ python = "^3.11"
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.13.0"
+toml = "^0.10.0"
 
 [tool.poetry.scripts]
 xlsql = "xlsql.cli:main"

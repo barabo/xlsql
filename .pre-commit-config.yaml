@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-added-large-files
+  - repo: https://github.com/psf/black
+    rev: 23.11.0
+    hooks:
+      - id: black
+  - repo: local
+    hooks:
+      - id: update-version
+        name: Confirm that the version in pyproject matches the source.
+        entry: python scripts/update_version.py
+        language: system
+        files: '(\.py$|pyproject.toml)'
