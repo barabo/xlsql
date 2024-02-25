@@ -59,13 +59,19 @@ def normalize(name: str) -> str:
     help="Overwrite an existing database.",
 )
 @click.option(
-    "--verbose", "-v",
+    "--sheet",
+    multiple=True,
+    help="A sheet to extract.",
+)
+@click.option(
+    "--verbose",
+    "-v",
     is_flag=True,
     type=bool,
     default=False,
     help="Show verbose output.",
 )
-def main(spreadsheet, database, force, verbose) -> None:
+def main(spreadsheet, database, force, sheet, verbose) -> None:
     """
     Convert an Excel spreadsheet into a SQLite database.
 
@@ -73,6 +79,7 @@ def main(spreadsheet, database, force, verbose) -> None:
         spreadsheet (str): The path to the Excel spreadsheet.
         database (str): The name of the database to create.
         force (bool): Flag to overwrite an existing database.
+        sheet (list[str]): The name of the sheets to extract.
         verbose (bool): Flag to show verbose output.
 
     Returns:
@@ -103,18 +110,27 @@ def main(spreadsheet, database, force, verbose) -> None:
 
         # Create a new SQLite database and connect to it.
         with sqlite3.connect(database) as db:
-            log(f"Populating {database} using the contents of {len(workbook.sheetnames)} sheets found in {spreadsheet}.")
+            log(
+                f"Populating {database} using the contents of {len(workbook.sheetnames)} sheets found in {spreadsheet}."
+            )
 
             # Iterate over the sheets in the workbook.
             for sheet_name in workbook.sheetnames:
-                sheet = workbook[sheet_name]
-                rows = sheet.iter_rows(values_only=True)
+                # Skip any sheets that were not explicitly requested.
+                if sheet and sheet_name not in sheet:
+                    log(f"Skipping sheet named '{sheet_name}'.")
+                    continue
+
+                # Reference the data in the rows of the current sheet.
+                rows = workbook[sheet_name].iter_rows(values_only=True)
 
                 # Create a table for each sheet.
                 headings = list(next(rows))
                 columns = [normalize(heading) for heading in headings]
                 table_name = normalize(sheet_name)
-                log(f"Mapping contents of sheet '{sheet_name}' to table '{table_name}':")
+                log(
+                    f"Mapping contents of sheet '{sheet_name}' to table '{table_name}':"
+                )
                 for heading, column in zip(headings, columns):
                     log(f"  {heading} -> {column}")
                 create_table_sql = f"CREATE TABLE {table_name} ({', '.join(columns)})"
