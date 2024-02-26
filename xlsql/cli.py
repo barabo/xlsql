@@ -32,10 +32,13 @@ Examples:
     xlsql example.xlsx -c name -c id -c address -s people
     # Only select the name, id, and address columns from the people sheet.
 """
-import click
-import openpyxl
+
 import sqlite3
 from pathlib import Path
+
+import click
+import openpyxl
+
 from .version import VERSION
 
 
@@ -183,7 +186,11 @@ def main(ctx, spreadsheet, column, database, force, sheet, verbose, version) -> 
             # Iterate over the sheets in the workbook.
             for sheet_name in workbook.sheetnames:
                 # Skip any sheets that were not explicitly requested.
-                if sheet and sheet_name not in sheet:
+                if (
+                    sheet
+                    and sheet_name not in sheet
+                    and normalize(sheet_name) not in sheet
+                ):
                     log(f"Skipping sheet named '{sheet_name}'.")
                     continue
 
@@ -213,7 +220,7 @@ def main(ctx, spreadsheet, column, database, force, sheet, verbose, version) -> 
                     create_table_sql = (
                         f"CREATE TABLE {table_name} ({', '.join(columns)})"
                     )
-                    log(f"DB executing SQL: {create_table_sql}")
+                    log(f"DB executing SQL: '{create_table_sql};'")
                     db.execute(create_table_sql)
                 else:
                     log(
@@ -251,9 +258,9 @@ def main(ctx, spreadsheet, column, database, force, sheet, verbose, version) -> 
                         if flush:
                             log(f"Writing {total[0]} rows...")
                             db.commit()
-                            log("DONE!")
 
                 # Insert rows in batches, flushing the final rows.
+                log(f"DB executing SQL: '{insert_rows};'")
                 for row in rows:
                     if row:
                         if column and selected:
@@ -262,6 +269,7 @@ def main(ctx, spreadsheet, column, database, force, sheet, verbose, version) -> 
                             insert(row)
                 else:
                     insert(None)  # Flush a partial batch.
+                    log("DONE!\n")
 
     finally:
         # Clean up.
