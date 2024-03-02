@@ -39,7 +39,7 @@ from pathlib import Path
 import click
 import openpyxl
 
-from .version import VERSION
+from xlsql.version import VERSION
 
 
 def normalize(name: str) -> str:
@@ -53,10 +53,31 @@ def normalize(name: str) -> str:
     Returns:
         str: The normalized name.
     """
-    name = "EMPTY" if name is None else name
-    name = name.lower().strip()
-    name = "".join(c for c in name if c.isprintable())
-    return name.replace("-", "_").replace(" ", "_")
+    if name is None:
+        return "EMPTY"
+    ignored = set("{<([`~!?@#$%^&*,.=:;|])>}")
+    replace = set("+- /\\")
+    letters = []
+    for c in name.lower():
+        # Sanitize characters for use in SQL.
+        if c.isprintable() and c not in ignored:
+            letters.append(c if c not in replace else "_")
+        # Remove double underscores.
+        if len(letters) > 1:
+            if letters[-1] == "_" and letters[-2] == "_":
+                letters.pop()
+
+    # Strip leading and trailing underscores.
+    while letters and letters[0] == "_":
+        letters.pop(0)
+    while letters and letters[-1] == "_":
+        letters.pop()
+
+    if not letters:
+        return "EMPTY"
+
+    # Join the letters and return the normalized name.
+    return "".join(letters)
 
 
 def get_column_names(sheet_name: str, headings: list[str], log: any) -> list[str]:
